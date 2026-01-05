@@ -1,0 +1,1145 @@
+<!DOCTYPE html>
+<html lang="es" data-bs-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Uber RD | Analytics Command Center Premium</title>
+    
+    <!-- Dependencies -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+
+    <style>
+        :root {
+            /* Colores Base Light */
+            --bg-body: #f4f4f4;
+            --panel-bg: #ffffff;
+            --text-primary: #333333;
+            --text-secondary: #666666;
+            --border-color: #eeeeee;
+            --sidebar-bg: #000000;
+            --sidebar-text: #888888;
+            --sidebar-hover: #ffffff;
+            --table-hover: #f8f9fa;
+            
+            /* Branding */
+            --uber-black: #000000;
+            --uber-green: #05944F;
+            
+            /* Dims */
+            --sidebar-w: 280px;
+            --sidebar-collapsed-w: 80px;
+            --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        /* TEMA OSCURO */
+        [data-bs-theme="dark"] {
+            --bg-body: #121212;
+            --panel-bg: #1e1e1e;
+            --text-primary: #e0e0e0;
+            --text-secondary: #a0a0a0;
+            --border-color: #333333;
+            --sidebar-bg: #000000; /* Sidebar siempre oscuro */
+            --table-hover: #2c2c2c;
+            --uber-black: #ffffff; /* Invertido para textos sobre fondo oscuro */
+        }
+
+        body { font-family: 'Inter', sans-serif; background-color: var(--bg-body); color: var(--text-primary); transition: var(--transition); overflow-x: hidden; }
+
+        /* --- SIDEBAR --- */
+        .sidebar {
+            width: var(--sidebar-w);
+            height: 100vh;
+            position: fixed;
+            background: var(--sidebar-bg);
+            z-index: 1100;
+            transition: var(--transition);
+            border-right: 1px solid #333;
+            display: flex;
+            flex-direction: column;
+        }
+        .sidebar.collapsed { width: var(--sidebar-collapsed-w); }
+        .sidebar.collapsed .brand-text, .sidebar.collapsed .nav-text, .sidebar.collapsed .sidebar-footer-text, .sidebar.collapsed .fa-chevron-down { display: none; }
+        .sidebar.collapsed .collapse { display: none !important; }
+        .sidebar.collapsed .nav-link { justify-content: center; padding: 1.2rem 0; }
+        .sidebar.collapsed .nav-link i { margin-right: 0; font-size: 1.4rem; }
+
+        .nav-link { color: var(--sidebar-text); padding: 1rem 2rem; display: flex; align-items: center; border-left: 4px solid transparent; transition: 0.2s; font-weight: 500; }
+        .nav-link:hover, .nav-link.active { color: var(--sidebar-hover); background: rgba(255,255,255,0.05); border-left-color: var(--sidebar-hover); }
+        .nav-link i { width: 30px; margin-right: 12px; text-align: center; }
+        .transition { transition: transform 0.3s ease; }
+        .nav-link[aria-expanded="true"] .transition { transform: rotate(180deg); }
+        .bg-white.bg-opacity-10 { background: rgba(255,255,255,0.05); }
+
+        /* --- MAIN --- */
+        .main { margin-left: var(--sidebar-w); padding: 2rem; transition: var(--transition); }
+        .main.expanded { margin-left: var(--sidebar-collapsed-w); }
+
+        /* --- CARDS & PANELS --- */
+        .card-kpi, .chart-card, .table-box { 
+            background: var(--panel-bg); 
+            border-radius: 16px; 
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05); 
+            border: 1px solid var(--border-color);
+            transition: transform 0.2s;
+        }
+        .card-kpi { padding: 1.5rem; height: 100%; position: relative; overflow: hidden; }
+        .card-kpi:hover { transform: translateY(-3px); }
+        
+        .kpi-icon { position: absolute; right: 20px; top: 20px; font-size: 2.5rem; opacity: 0.1; color: var(--text-primary); }
+        .kpi-label { font-size: 0.7rem; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; margin-bottom: 0.5rem; letter-spacing: 0.5px; }
+        .kpi-val { font-size: 2rem; font-weight: 800; color: var(--text-primary); }
+
+        /* --- FILTERS --- */
+        .filter-container {
+            background: var(--panel-bg);
+            border-radius: 14px;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.03);
+            border: 1px solid var(--border-color);
+        }
+        .form-control, .form-select, .input-group-text {
+            background-color: var(--bg-body);
+            border-color: var(--border-color);
+            color: var(--text-primary);
+        }
+        .form-control:focus, .form-select:focus {
+            background-color: var(--panel-bg);
+            border-color: var(--text-secondary);
+            color: var(--text-primary);
+            box-shadow: none;
+        }
+
+        /* --- MAP --- */
+        #map { height: 500px; border-radius: 16px; z-index: 1; }
+        .emoji-marker { font-size: 28px; filter: drop-shadow(0 3px 5px rgba(0,0,0,0.3)); transition: 0.2s; cursor: pointer; }
+        .emoji-marker:hover { transform: scale(1.4); z-index: 1000 !important; }
+
+        /* --- TABLE --- */
+        .table-custom { margin-bottom: 0; }
+        .table-custom th { background: var(--panel-bg); font-weight: 700; color: var(--text-secondary); font-size: 0.8rem; text-transform: uppercase; padding: 1rem; border-bottom: 2px solid var(--border-color); }
+        .table-custom td { padding: 1rem; vertical-align: middle; border-bottom: 1px solid var(--border-color); color: var(--text-primary); }
+        .table-custom tbody tr:hover { background-color: var(--table-hover); cursor: pointer; }
+        
+        .img-table-driver { width: 45px; height: 45px; border-radius: 50%; object-fit: cover; border: 2px solid var(--border-color); }
+        .img-table-car { width: 70px; height: 45px; border-radius: 6px; object-fit: cover; mix-blend-mode: multiply; }
+        [data-bs-theme="dark"] .img-table-car { mix-blend-mode: normal; filter: brightness(0.9); }
+
+        /* --- MODAL --- */
+        .modal-content { background-color: var(--panel-bg); color: var(--text-primary); border: 1px solid var(--border-color); }
+        .modal-header-custom { background: #000; color: #fff; padding: 3rem 2rem 4rem; position: relative; text-align: center; }
+        .modal-driver-img { 
+            width: 140px; height: 140px; border-radius: 50%; border: 5px solid var(--panel-bg); 
+            object-fit: cover; position: absolute; bottom: -70px; left: 50%; transform: translateX(-50%); 
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3); background: #fff;
+        }
+        .modal-car-lg { width: 100%; max-width: 500px; height: auto; border-radius: 12px; object-fit: cover; box-shadow: 0 10px 30px rgba(0,0,0,0.1); }
+        
+        .ficha-data { background: var(--bg-body); padding: 1.5rem; border-radius: 12px; border: 1px solid var(--border-color); }
+        .stat-box { background: var(--bg-body); border: 1px solid var(--border-color); border-radius: 10px; padding: 1rem; text-align: center; }
+
+        .chart-card { padding: 1.5rem; height: 100%; }
+        .text-uber-green { color: #05944F !important; }
+
+        /* Estilos Paginación */
+        .pagination .page-link { color: var(--uber-black); background-color: var(--panel-bg); border-color: var(--border-color); }
+        .pagination .page-item.active .page-link { background-color: var(--uber-green); border-color: var(--uber-green); color: white; }
+        .pagination .page-link:hover { background-color: var(--table-hover); color: var(--uber-green); }
+    </style>
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<nav class="sidebar" id="sidebar">
+    <div class="p-4 mb-3 d-flex align-items-center">
+        <img src="https://upload.wikimedia.org/wikipedia/commons/5/58/Uber_logo_2018.svg" height="24" style="filter: invert(1);">
+        <span class="ms-3 fw-bold text-white brand-text" style="letter-spacing: 1px;">ANALYTICS</span>
+    </div>
+    
+    <div class="flex-grow-1" id="sidebarMenu">
+        <ul class="nav flex-column">
+            <li class="nav-item">
+                <a href="#" class="nav-link active"><i class="fa-solid fa-gauge-high"></i> <span class="nav-text">Dashboard</span></a>
+            </li>
+            
+            <!-- Grupo Operaciones -->
+            <li class="nav-item">
+                <a class="nav-link" data-bs-toggle="collapse" href="#menuOps" role="button" aria-expanded="false">
+                    <i class="fa-solid fa-layer-group"></i> <span class="nav-text">Operaciones</span>
+                    <i class="fa-solid fa-chevron-down ms-auto small transition" id="arrowOps"></i>
+                </a>
+                <div class="collapse" id="menuOps">
+                    <ul class="nav flex-column ps-4 bg-white bg-opacity-10">
+                        <li class="nav-item"><a href="#" class="nav-link py-2"><i class="fa-solid fa-map-location-dot"></i> <span class="nav-text">Mapa Vivo</span></a></li>
+                        <li class="nav-item"><a href="#" class="nav-link py-2"><i class="fa-solid fa-users"></i> <span class="nav-text">Conductores</span></a></li>
+                    </ul>
+                </div>
+            </li>
+
+            <!-- Grupo Reportes -->
+            <li class="nav-item">
+                <a class="nav-link" data-bs-toggle="collapse" href="#menuReports" role="button" aria-expanded="false">
+                    <i class="fa-solid fa-chart-line"></i> <span class="nav-text">Insights</span>
+                    <i class="fa-solid fa-chevron-down ms-auto small transition" id="arrowReports"></i>
+                </a>
+                <div class="collapse" id="menuReports">
+                    <ul class="nav flex-column ps-4 bg-white bg-opacity-10">
+                        <li class="nav-item"><a href="#" class="nav-link py-2"><i class="fa-solid fa-file-invoice-dollar"></i> <span class="nav-text">Tendencias</span></a></li>
+                        <li class="nav-item"><a href="#" class="nav-link py-2"><i class="fa-solid fa-table"></i> <span class="nav-text">Registros</span></a></li>
+                    </ul>
+                </div>
+            </li>
+        </ul>
+    </div>
+
+    <div class="p-4 border-top border-secondary sidebar-footer-text">
+        <button class="btn btn-primary w-100 btn-sm" onclick="document.getElementById('fileInput').click()">
+            <i class="fa-solid fa-file-import me-2"></i>Cargar Excel
+        </button>
+        <input type="file" id="fileInput" accept=".xlsx, .xls" class="d-none">
+        <div id="fileStatus" class="text-secondary small mt-2 text-center" style="font-size: 0.75rem;">Esperando 'Uber_RD_Dataset_Final.xlsx'</div>
+    </div>
+</nav>
+
+<!-- MAIN -->
+<main class="main" id="mainContent">
+    
+    <!-- HEADER -->
+    <header class="d-flex justify-content-between align-items-center mb-4">
+        <div class="d-flex align-items-center">
+            <button class="btn btn-outline-secondary me-3 border-0" onclick="toggleSidebar()"><i class="fa-solid fa-bars fs-5"></i></button>
+            <div>
+                <h3 class="fw-bold mb-0">🇩🇴 Uber RD | Command Center</h3>
+                <div class="text-muted small">Vista Ejecutiva de Operaciones</div>
+            </div>
+        </div>
+        <div class="d-flex gap-2 align-items-center">
+            <button class="btn btn-outline-danger btn-sm" onclick="resetAll()"><i class="fa-solid fa-filter-circle-xmark me-2"></i>Limpiar</button>
+            <button class="btn btn-dark rounded-circle border-0" id="themeToggle" style="width: 40px; height: 40px;"><i class="fa-solid fa-moon"></i></button>
+        </div>
+    </header>
+
+    <!-- FILTROS (DINÁMICOS - SIN BOTÓN) -->
+    <section class="filter-container">
+        <div class="row g-3 align-items-end">
+            <div class="col-lg-3">
+                <label class="form-label fw-bold small">🔍 Búsqueda Inteligente</label>
+                <input type="text" id="filterSearch" class="form-control form-control-sm" placeholder="Conductor, Vehículo, Zona...">
+            </div>
+            <div class="col-lg-2">
+                <label class="form-label fw-bold small">🚗 Tipo de Servicio</label>
+                <select id="filterService" class="form-select form-select-sm"></select>
+            </div>
+            <div class="col-lg-3">
+                <label class="form-label fw-bold small">📅 Periodo (Desde - Hasta)</label>
+                <div class="input-group input-group-sm">
+                    <input type="date" id="dateStart" class="form-control">
+                    <span class="input-group-text bg-transparent border-start-0 border-end-0">-</span>
+                    <input type="date" id="dateEnd" class="form-control">
+                </div>
+            </div>
+            <div class="col-lg-2">
+                <label class="form-label fw-bold small">📆 Año Fiscal</label>
+                <select id="filterYear" class="form-select form-select-sm"></select>
+            </div>
+            <div class="col-lg-2">
+                <label class="form-label fw-bold small">🗓️ Mes Operativo</label>
+                <select id="filterMonth" class="form-select form-select-sm"></select>
+            </div>
+        </div>
+    </section>
+
+    <!-- KPI SECTION 1 (FINANCIERA) -->
+    <h6 class="fw-bold text-uppercase text-muted mb-3"><i class="fa-solid fa-sack-dollar me-2"></i>KPIs Financieros</h6>
+    <div class="row g-4 mb-4">
+        <div class="col-md-3">
+            <div class="card-kpi border-start border-4 border-success">
+                <div class="kpi-label">Ingresos Totales</div>
+                <div class="kpi-val text-success" id="kpiRev">RD$ 0</div>
+                <i class="fa-solid fa-money-bill-wave kpi-icon"></i>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card-kpi border-start border-4 border-primary">
+                <div class="kpi-label">Ticket Promedio</div>
+                <div class="kpi-val text-primary" id="kpiTicket">RD$ 0</div>
+                <i class="fa-solid fa-receipt kpi-icon"></i>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card-kpi border-start border-4 border-info">
+                <div class="kpi-label">Ganancia Neta</div>
+                <div class="kpi-val text-info" id="kpiProfit">RD$ 0</div>
+                <i class="fa-solid fa-piggy-bank kpi-icon"></i>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card-kpi border-start border-4 border-secondary">
+                <div class="kpi-label">Costos Operativos</div>
+                <div class="kpi-val text-secondary" id="kpiCost">RD$ 0</div>
+                <i class="fa-solid fa-gas-pump kpi-icon"></i>
+            </div>
+        </div>
+    </div>
+
+    <!-- KPI SECTION 2 (OPERATIVA) -->
+    <h6 class="fw-bold text-uppercase text-muted mb-3 mt-5"><i class="fa-solid fa-gears me-2"></i>KPIs Operativos & OKR</h6>
+    <div class="row g-4 mb-5">
+        <div class="col-md-3">
+            <div class="card-kpi">
+                <div class="kpi-label">Viajes Totales</div>
+                <div class="kpi-val" id="kpiTrips">0</div>
+                <i class="fa-solid fa-route kpi-icon"></i>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card-kpi">
+                <div class="kpi-label">Efectividad (OKR)</div>
+                <div class="kpi-val" style="color: #05944F;" id="kpiOkr">0%</div>
+                <i class="fa-solid fa-bullseye kpi-icon"></i>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card-kpi">
+                <div class="kpi-label">Rating Global</div>
+                <div class="kpi-val text-warning" id="kpiRating">0.0</div>
+                <i class="fa-solid fa-star kpi-icon"></i>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card-kpi">
+                <div class="kpi-label">Tasa Cancelación</div>
+                <div class="kpi-val text-danger" id="kpiCancel">0%</div>
+                <i class="fa-solid fa-ban kpi-icon"></i>
+            </div>
+        </div>
+    </div>
+
+    <!-- CHARTS: TENDENCIAS MEJORADAS -->
+    <div class="row g-4 mb-4">
+        <div class="col-lg-6">
+            <div class="chart-card">
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <h6 class="fw-bold m-0">📊 Tendencia Anual (Ingresos vs Viajes)</h6>
+                </div>
+                <div id="chartYear"></div>
+            </div>
+        </div>
+        <div class="col-lg-6">
+            <div class="chart-card">
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <h6 class="fw-bold m-0">📊 Distribución por Servicio y Estado</h6>
+                </div>
+                <div id="chartServiceStatus"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MAPA & METODOS PAGO -->
+    <div class="row g-4 mb-4">
+        <div class="col-lg-8">
+            <div class="chart-card p-0 overflow-hidden">
+                <div class="p-3 border-bottom d-flex justify-content-between align-items-center" style="background: var(--bg-body);">
+                    <h6 class="fw-bold m-0">📍 Mapa Operativo en Vivo</h6>
+                    <span class="badge bg-dark" id="mapCounter">0 Activos</span>
+                </div>
+                <div id="map"></div>
+            </div>
+        </div>
+        <div class="col-lg-4">
+            <div class="chart-card">
+                <h6 class="fw-bold mb-4">💳 Métodos de Pago</h6>
+                <div id="chartPayment"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- CLIENTES Y TOP DRIVERS -->
+    <div class="row g-4 mb-5">
+        <div class="col-lg-6">
+            <div class="chart-card">
+                <h6 class="fw-bold mb-4">🏙️ Top Zonas (Demanda por Origen)</h6>
+                <div id="chartClientsHoriz"></div>
+            </div>
+        </div>
+        <div class="col-lg-6">
+            <div class="chart-card">
+                <h6 class="fw-bold mb-4">🥇 Top 10 Ingresos (Conductores)</h6>
+                <div id="chartTopDrivers"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- TABLA RAW DATA -->
+    <div class="table-box mb-5">
+        <div class="p-4 border-bottom" style="background: var(--bg-body);">
+            <div class="d-flex justify-content-between align-items-center">
+                <h5 class="fw-bold m-0">📝 Últimos Registros (Raw Data)</h5>
+                <span class="badge bg-secondary">Mostrando últimos 100</span>
+            </div>
+        </div>
+        <div class="table-responsive" style="max-height: 500px;">
+            <table class="table table-custom table-hover align-middle mb-0">
+                <thead class="sticky-top z-1">
+                    <tr>
+                        <th class="ps-4">Conductor</th>
+                        <th>Vehículo</th>
+                        <th>Servicio</th>
+                        <th>Monto</th>
+                        <th>OKR</th>
+                        <th>Estado</th>
+                        <th>Fecha</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody id="rawTableBody">
+                    <tr><td colspan="8" class="text-center py-5 text-muted">Carga el Excel 'Uber_RD_Dataset_Final.xlsx'</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <!-- PAGINACION -->
+        <div class="p-3 border-top d-flex justify-content-between align-items-center bg-light-subtle">
+            <div class="small text-muted" id="paginationInfo">Mostrando 0 - 0 de 0</div>
+            <nav>
+                <ul class="pagination pagination-sm mb-0" id="paginationControls">
+                    <!-- Dinámico -->
+                </ul>
+            </nav>
+        </div>
+    </div>
+
+    <!-- SECCION CONDUCTORES -->
+    <div class="table-box mb-5">
+        <div class="p-4 border-bottom bg-dark text-white rounded-top">
+            <h5 class="fw-bold m-0"><i class="fa-solid fa-id-card me-2"></i>Directorio de Socios Conductores</h5>
+        </div>
+        <div class="table-responsive" style="max-height: 500px;">
+            <table class="table table-custom table-hover align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th class="ps-4">Código</th>
+                        <th>Perfil</th>
+                        <th>Nombre y Apellido</th>
+                        <th>Vehículo</th>
+                        <th class="text-center">Viajes</th>
+                        <th class="text-end pe-4">Ganancia Acumulada</th>
+                    </tr>
+                </thead>
+                <tbody id="driverTableBody">
+                    <!-- Dinámico -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</main>
+
+<!-- MODAL FICHA COMPLETA -->
+<div class="modal fade" id="fullModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered modal-xl">
+        <div class="modal-content border-0 rounded-4 overflow-hidden">
+            <!-- HEADER -->
+            <div class="modal-header-custom">
+                <button type="button" class="btn-close btn-close-white position-absolute top-0 end-0 m-4" data-bs-dismiss="modal"></button>
+                <h2 class="fw-bold mb-0" id="modName">Nombre Conductor</h2>
+                <div class="opacity-75 small font-monospace mt-1" id="modId">ID: ---</div>
+                <img src="" id="modPhoto" class="modal-driver-img">
+            </div>
+
+            <div class="modal-body pt-5 px-5 pb-5 mt-4">
+                <div class="text-center mb-5">
+                    <div class="fs-4 text-warning" id="modRating">★★★★★</div>
+                    <span class="badge bg-dark px-3 py-2 mt-2 rounded-pill" id="modService">Servicio</span>
+                </div>
+
+                <div class="row g-5">
+                    <!-- IZQUIERDA: FOTO VEHICULO GRANDE -->
+                    <div class="col-lg-6">
+                        <h5 class="fw-bold mb-3 border-bottom pb-2">🚘 Ficha del Vehículo</h5>
+                        <div class="bg-body-secondary p-4 rounded-4 text-center border shadow-sm">
+                            <img src="" id="modCarPhoto" class="modal-car-lg mb-3" alt="Vehículo Grande">
+                            <h4 class="fw-bold mb-3 text-primary" id="modCarModel">Modelo</h4>
+                            <div class="row g-2">
+                                <div class="col-4">
+                                    <div class="p-2 bg-body rounded border">
+                                        <small class="text-muted d-block fw-bold" style="font-size: 0.6rem; letter-spacing: 0.5px;">PLACA</small>
+                                        <span class="fw-bold small text-primary" id="modCarPlate">---</span>
+                                    </div>
+                                </div>
+                                <div class="col-4">
+                                    <div class="p-2 bg-body rounded border">
+                                        <small class="text-muted d-block fw-bold" style="font-size: 0.6rem; letter-spacing: 0.5px;">COLOR</small>
+                                        <span class="fw-bold small text-primary" id="modCarColor">---</span>
+                                    </div>
+                                </div>
+                                <div class="col-4">
+                                    <div class="p-2 bg-body rounded border">
+                                        <small class="text-muted d-block fw-bold" style="font-size: 0.6rem; letter-spacing: 0.5px;">AÑO</small>
+                                        <span class="fw-bold small text-primary" id="modCarYear">---</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- DERECHA: DATOS Y FINANZAS -->
+                    <div class="col-lg-6">
+                        <h5 class="fw-bold mb-3 border-bottom pb-2">👤 Detalle del Cliente & Viaje</h5>
+                        
+                        <div class="ficha-data mb-4">
+                            <div class="row align-items-center">
+                                <div class="col-auto">
+                                    <div class="rounded-circle bg-dark text-white d-flex align-items-center justify-content-center" style="width: 50px; height: 50px;">
+                                        <i class="fa-solid fa-user-tie fs-4"></i>
+                                    </div>
+                                </div>
+                                <div class="col">
+                                    <small class="text-muted d-block fw-bold text-uppercase">Cliente Solicitante</small>
+                                    <div id="modClient" class="fw-bold fs-5">---</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="row g-3 mb-4">
+                            <div class="col-6">
+                                <div class="ficha-data">
+                                    <small class="text-muted d-block fw-bold text-uppercase">Punto de Origen</small>
+                                    <div id="modOrigin" class="fw-bold">---</div>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="ficha-data">
+                                    <small class="text-muted d-block fw-bold text-uppercase">Punto de Destino</small>
+                                    <div id="modDest" class="fw-bold">---</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="row g-3 mb-4">
+                            <div class="col-4">
+                                <div class="stat-box">
+                                    <div class="small text-muted fw-bold">TARIFA</div>
+                                    <div class="h5 fw-bold mb-0" id="modPrice">0</div>
+                                </div>
+                            </div>
+                            <div class="col-4">
+                                <div class="stat-box">
+                                    <div class="small text-muted fw-bold">COSTO OP.</div>
+                                    <div class="h5 fw-bold mb-0 text-secondary" id="modCost">0</div>
+                                </div>
+                            </div>
+                            <div class="col-4">
+                                <div class="stat-box border-success bg-success bg-opacity-10">
+                                    <div class="small text-success fw-bold">GANANCIA</div>
+                                    <div class="h5 fw-bold mb-0 text-success" id="modProfit">0</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="row g-3 mb-4">
+                            <div class="col-6">
+                                <small class="text-muted fw-bold">METODO DE PAGO</small>
+                                <div class="d-flex align-items-center mt-1">
+                                    <i class="fa-regular fa-credit-card me-2"></i>
+                                    <span id="modPayment" class="fw-bold fs-5">---</span>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <small class="text-muted fw-bold">ESTADO DE OPERACIÓN</small>
+                                <div id="modStatus" class="fw-bold fs-5 mt-1">---</div>
+                            </div>
+                        </div>
+
+                        <div class="alert alert-light border d-flex align-items-center" role="alert">
+                            <i class="fa-solid fa-clock-rotate-left me-3 fs-4"></i>
+                            <div>
+                                <div class="small text-muted fw-bold">CUMPLIMIENTO OKR</div>
+                                <div id="modOkr" class="fw-bold">---</div>
+                            </div>
+                        </div>
+                        
+                        <div id="modChart"></div>
+
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL PERFIL CONDUCTOR -->
+<div class="modal fade" id="driverProfileModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered modal-xl">
+        <div class="modal-content border-0 rounded-4 overflow-hidden">
+            <div class="modal-header-custom" style="padding: 2rem 2rem 5rem;">
+                <button type="button" class="btn-close btn-close-white position-absolute top-0 end-0 m-4" data-bs-dismiss="modal"></button>
+                <h2 class="fw-bold mb-0" id="dpName">---</h2>
+                <div class="opacity-75 small font-monospace mt-1" id="dpCode">CÓDIGO: ---</div>
+                <img src="" id="dpPhoto" class="modal-driver-img">
+            </div>
+
+            <div class="modal-body pt-5 px-5 pb-5 mt-4">
+                <div class="row g-5">
+                    <!-- IZQUIERDA: VEHICULO Y ESTADISTICAS -->
+                    <div class="col-lg-4">
+                        <div class="card h-100 border shadow-sm">
+                            <div class="card-body">
+                                <h6 class="fw-bold text-muted border-bottom pb-2 mb-3">VEHÍCULO ASIGNADO</h6>
+                                <img src="" id="dpCarPhoto" class="img-fluid rounded mb-3" style="width: 100%; height: 180px; object-fit: cover;">
+                                <h5 class="fw-bold mb-0" id="dpCarModel">---</h5>
+                                <hr>
+                                <div class="row g-2">
+                                    <div class="col-6">
+                                        <div class="stat-box">
+                                            <small class="text-muted d-block">VIAJES</small>
+                                            <div class="h5 fw-bold mb-0" id="dpTotalTrips">0</div>
+                                        </div>
+                                    </div>
+                                    <div class="col-6">
+                                        <div class="stat-box">
+                                            <small class="text-muted d-block">RATING</small>
+                                            <div class="h5 fw-bold mb-0 text-warning" id="dpAvgRating">0.0</div>
+                                        </div>
+                                    </div>
+                                    <div class="col-12 mt-3">
+                                        <div class="p-3 bg-success bg-opacity-10 border border-success rounded text-center">
+                                            <small class="text-success fw-bold d-block">TOTAL GANANCIAS</small>
+                                            <div class="h3 fw-bold text-success mb-0" id="dpTotalProfit">RD$ 0</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- DERECHA: GRAFICO Y TABLA DETALLES -->
+                    <div class="col-lg-8">
+                        <div class="card border shadow-sm mb-4">
+                            <div class="card-body">
+                                <h6 class="fw-bold text-muted mb-3">RENDIMIENTO HISTÓRICO</h6>
+                                <div id="dpChart"></div>
+                            </div>
+                        </div>
+
+                        <h6 class="fw-bold text-muted mb-3">ÚLTIMOS VIAJES DEL CHOFER</h6>
+                        <div class="table-responsive" style="max-height: 300px;">
+                            <table class="table table-sm table-hover align-middle border">
+                                <thead class="table-dark">
+                                    <tr>
+                                        <th>Fecha</th>
+                                        <th>Destino</th>
+                                        <th>Monto</th>
+                                        <th>Estado</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="dpTableBody">
+                                    <!-- Dinámico -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+<script>
+    // --- INIT & THEME ---
+    const map = L.map('map').setView([18.48, -69.93], 12);
+    let markerLayer = L.layerGroup().addTo(map);
+    let rawData = [];
+    let charts = {};
+    
+    // Paginación
+    let currentPage = 1;
+    const rowsPerPage = 25;
+    
+    // Cargar Tema Guardado
+    const savedTheme = localStorage.getItem('theme') || 'light';
+    document.documentElement.setAttribute('data-bs-theme', savedTheme);
+    updateMapTiles(savedTheme);
+
+    // --- SISTEMA DE PERSISTENCIA (IndexedDB) ---
+    // Usamos IndexedDB porque LocalStorage tiene un limite de 5MB que los Excel suelen exceder
+    const DB_CFG = { name: 'UberAnalyticsDB', store: 'dataset', version: 1 };
+
+    function getDB() {
+        return new Promise((resolve, reject) => {
+            const req = indexedDB.open(DB_CFG.name, DB_CFG.version);
+            req.onupgradeneeded = e => e.target.result.createObjectStore(DB_CFG.store);
+            req.onsuccess = e => resolve(e.target.result);
+            req.onerror = e => reject(e);
+        });
+    }
+
+    async function loadPersistedData() {
+        try {
+            const db = await getDB();
+            const tx = db.transaction(DB_CFG.store, 'readonly');
+            const req = tx.objectStore(DB_CFG.store).get('latest');
+            
+            req.onsuccess = () => {
+                if (req.result) {
+                    rawData = req.result;
+                    // Restaurar fechas
+                    rawData.forEach(r => r.FechaParsed = new Date(r.FechaParsed));
+                    
+                    initFilters();
+                    renderAll();
+                    document.getElementById('fileStatus').innerText = '⚡ Datos Restaurados';
+                }
+            };
+        } catch (err) { console.log("Cache vacía o error", err); }
+    }
+
+    // Iniciar carga automática
+    loadPersistedData();
+
+    const fmt = (n) => new Intl.NumberFormat('es-DO', {style:'currency', currency:'DOP', maximumFractionDigits:0}).format(n);
+
+    // Sidebar
+    function toggleSidebar() {
+        document.getElementById('sidebar').classList.toggle('collapsed');
+        document.getElementById('mainContent').classList.toggle('expanded');
+        setTimeout(() => map.invalidateSize(), 300);
+    }
+
+    // Theme Toggle Logic
+    document.getElementById('themeToggle').addEventListener('click', () => {
+        const current = document.documentElement.getAttribute('data-bs-theme');
+        const next = current === 'dark' ? 'light' : 'dark';
+        document.documentElement.setAttribute('data-bs-theme', next);
+        localStorage.setItem('theme', next);
+        updateMapTiles(next);
+        renderCharts(getFiltered()); // Re-render charts to adapt colors
+    });
+
+    function updateMapTiles(theme) {
+        map.eachLayer(l => { if (l instanceof L.TileLayer) map.removeLayer(l) });
+        L.tileLayer(theme === 'dark' 
+            ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png' 
+            : 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', 
+            { attribution: 'OSM' }
+        ).addTo(map);
+    }
+
+    // Excel Logic
+    document.getElementById('fileInput').addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if(!file) return;
+        const reader = new FileReader();
+        reader.onload = (evt) => {
+            const wb = XLSX.read(new Uint8Array(evt.target.result), {type: 'array'});
+            const data = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
+            rawData = data.map(r => ({ ...r, FechaParsed: parseExcelDate(r.Fecha) }));
+            
+            // Guardar en DB
+            getDB().then(db => {
+                const tx = db.transaction(DB_CFG.store, 'readwrite');
+                tx.objectStore(DB_CFG.store).put(rawData, 'latest');
+            });
+
+            document.getElementById('fileStatus').innerText = `✅ Cargado: ${file.name}`;
+            initFilters();
+            renderAll();
+        };
+        reader.readAsArrayBuffer(file);
+    });
+
+    function parseExcelDate(v) {
+        if(!v) return new Date();
+        if(typeof v === 'number') return new Date(Math.round((v - 25569) * 86400 * 1000));
+        return new Date(v);
+    }
+
+    // Filters - Dynamic on Change
+    function initFilters() {
+        const services = [...new Set(rawData.map(r => r.Servicio))];
+        const years = [...new Set(rawData.map(r => r.FechaParsed.getFullYear()))].sort();
+        const months = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+
+        const fill = (id, arr) => document.getElementById(id).innerHTML = '<option value="">Todos</option>' + arr.map(x => `<option value="${x}">${x}</option>`).join('');
+
+        fill('filterService', services);
+        fill('filterYear', years);
+        fill('filterMonth', months);
+
+        ['filterSearch', 'filterService', 'dateStart', 'dateEnd', 'filterYear', 'filterMonth'].forEach(id => {
+            document.getElementById(id).addEventListener('change', () => {
+                currentPage = 1;
+                renderAll();
+            }); 
+            if(id === 'filterSearch') {
+                document.getElementById(id).addEventListener('keyup', () => {
+                    currentPage = 1;
+                    renderAll();
+                });
+            }
+        });
+    }
+
+    function getFiltered() {
+        const sText = document.getElementById('filterSearch').value.toLowerCase();
+        const sServ = document.getElementById('filterService').value;
+        const sYear = document.getElementById('filterYear').value;
+        const sMonth = document.getElementById('filterMonth').value;
+        const dStart = document.getElementById('dateStart').value;
+        const dEnd = document.getElementById('dateEnd').value;
+        const mIdx = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"].indexOf(sMonth);
+
+        return rawData.filter(r => {
+            const matchText = !sText || (r.Conductor && r.Conductor.toLowerCase().includes(sText)) || (r.Vehiculo && r.Vehiculo.toLowerCase().includes(sText));
+            const matchServ = !sServ || r.Servicio === sServ;
+            const matchYear = !sYear || r.FechaParsed.getFullYear() == sYear;
+            const matchMonth = mIdx === -1 || r.FechaParsed.getMonth() === mIdx;
+            const matchDate = (!dStart || r.FechaParsed >= new Date(dStart)) && (!dEnd || r.FechaParsed <= new Date(dEnd));
+            return matchText && matchServ && matchYear && matchMonth && matchDate;
+        });
+    }
+
+    function renderAll() {
+        const data = getFiltered();
+        const isDark = document.documentElement.getAttribute('data-bs-theme') === 'dark';
+        
+        // 1. KPIs
+        const totalRev = data.reduce((a,b)=>a+(b.Precio_DOP||0),0);
+        const totalCost = data.reduce((a,b)=>a+(b.Costo_DOP||0),0);
+        const totalProfit = data.reduce((a,b)=>a+(b.Ganancia_DOP||0),0);
+        const okrCount = data.filter(r=>r.Cumplio_OKR === 'SI').length;
+        const cancelCount = data.filter(r=>r.Estado === 'Cancelado').length;
+        const avgRating = data.length ? (data.reduce((a,b)=>a+(b.Rating||0),0)/data.length) : 0;
+
+        document.getElementById('kpiRev').innerText = fmt(totalRev);
+        document.getElementById('kpiTicket').innerText = data.length ? fmt(totalRev/data.length) : '$0';
+        document.getElementById('kpiProfit').innerText = fmt(totalProfit);
+        document.getElementById('kpiCost').innerText = fmt(totalCost);
+        document.getElementById('kpiTrips').innerText = data.length;
+        document.getElementById('kpiOkr').innerText = data.length ? ((okrCount/data.length)*100).toFixed(1)+'%' : '0%';
+        document.getElementById('kpiRating').innerText = avgRating.toFixed(2);
+        document.getElementById('kpiCancel').innerText = data.length ? ((cancelCount/data.length)*100).toFixed(1)+'%' : '0%';
+
+        // 2. Charts & Map & Table
+        renderCharts(data, isDark);
+        renderMap(data);
+        renderTable(data);
+        renderPagination(data);
+        renderDriversTable(data);
+    }
+
+    function renderDriversTable(data) {
+        const drivers = {};
+        data.forEach(r => {
+            if (!drivers[r.Conductor]) {
+                drivers[r.Conductor] = {
+                    name: r.Conductor,
+                    photo: r.Conductor_Foto_URL,
+                    car: r.Vehiculo,
+                    carPhoto: r.Vehiculo_Foto_URL,
+                    trips: 0,
+                    profit: 0,
+                    ratings: [],
+                    records: []
+                };
+            }
+            drivers[r.Conductor].trips++;
+            drivers[r.Conductor].profit += (r.Ganancia_DOP || 0);
+            if (r.Rating) drivers[r.Conductor].ratings.push(r.Rating);
+            drivers[r.Conductor].records.push(r);
+        });
+
+        const tbody = document.getElementById('driverTableBody');
+        tbody.innerHTML = Object.values(drivers).sort((a,b) => b.profit - a.profit).map((d, idx) => `
+            <tr onclick="openDriverModal('${d.name.replace(/'/g, "\\'")}')" style="cursor:pointer">
+                <td class="ps-4 text-muted small">#${1000 + idx}</td>
+                <td><img src="${d.photo || 'https://via.placeholder.com/100'}" class="img-table-driver"></td>
+                <td class="fw-bold">${d.name}</td>
+                <td><small>${d.car}</small></td>
+                <td class="text-center"><span class="badge bg-secondary rounded-pill">${d.trips}</span></td>
+                <td class="text-end pe-4 fw-bold text-success">${fmt(d.profit)}</td>
+            </tr>
+        `).join('') || '<tr><td colspan="6" class="text-center py-4">No hay datos de conductores</td></tr>';
+    }
+
+    window.openDriverModal = function(name) {
+        const data = getFiltered();
+        const records = data.filter(r => r.Conductor === name);
+        if (!records.length) return;
+
+        const driver = {
+            name: name,
+            photo: records[0].Conductor_Foto_URL,
+            car: records[0].Vehiculo,
+            carPhoto: records[0].Vehiculo_Foto_URL,
+            trips: records.length,
+            profit: records.reduce((a, b) => a + (b.Ganancia_DOP || 0), 0),
+            rating: (records.reduce((a, b) => a + (b.Rating || 0), 0) / records.length).toFixed(2)
+        };
+
+        document.getElementById('dpName').innerText = driver.name;
+        document.getElementById('dpCode').innerText = `ID SOCIO: ${Math.floor(Math.random()*9000)+1000}`;
+        document.getElementById('dpPhoto').src = driver.photo;
+        document.getElementById('dpCarPhoto').src = driver.carPhoto;
+        document.getElementById('dpCarModel').innerText = driver.car;
+        document.getElementById('dpTotalTrips').innerText = driver.trips;
+        document.getElementById('dpAvgRating').innerText = driver.rating;
+        document.getElementById('dpTotalProfit').innerText = fmt(driver.profit);
+
+        // Tabla Detalle
+        document.getElementById('dpTableBody').innerHTML = records.slice(0, 10).map(r => `
+            <tr>
+                <td><small>${r.FechaParsed.toLocaleDateString()}</small></td>
+                <td><div class="text-truncate" style="max-width: 150px;">${r.Destino}</div></td>
+                <td class="fw-bold">${fmt(r.Precio_DOP)}</td>
+                <td><span class="badge ${r.Estado === 'Completado' ? 'bg-success' : 'bg-danger'}" style="font-size: 0.6rem;">${r.Estado}</span></td>
+            </tr>
+        `).join('');
+
+        // Gráfico Personal
+        renderApex('dpChart', {
+            series: [{name:'Ganancia', data: records.slice(-10).map(r => r.Ganancia_DOP)}],
+            chart: {type:'area', height:200, toolbar:{show:false}, background: 'transparent'},
+            colors: ['#05944F'],
+            xaxis: {labels:{show:false}},
+            theme: { mode: document.documentElement.getAttribute('data-bs-theme') }
+        });
+
+        new bootstrap.Modal(document.getElementById('driverProfileModal')).show();
+    }
+
+    function renderCharts(data, isDark) {
+        const textColor = isDark ? '#e0e0e0' : '#333';
+        const mainColor = isDark ? '#ffffff' : '#000000'; // Blanco en Dark, Negro en Light
+        
+        // A. Mixed Chart (Year Trend): Columns (Revenue) + Line (Trips)
+        const years = {}; 
+        const tripsY = {};
+        rawData.forEach(r => { 
+            const y = r.FechaParsed.getFullYear();
+            years[y] = (years[y]||0) + (r.Precio_DOP||0);
+            tripsY[y] = (tripsY[y]||0) + 1;
+        });
+        
+        renderApex('chartYear', {
+            series: [
+                {name:'Ingresos', type: 'column', data: Object.values(years)},
+                {name:'Viajes', type: 'line', data: Object.values(tripsY)}
+            ],
+            chart: {type:'line', height:300, toolbar:{show:false}, background: 'transparent'},
+            stroke: {width: [0, 4]},
+            colors: [mainColor, '#05944F'], // Dynamic Main Color
+            xaxis: {categories: Object.keys(years), labels: {style: {colors: textColor}}},
+            yaxis: [{title: {text: 'Ingresos', style:{color:textColor}}, labels: {style: {colors: textColor}, formatter: (v)=>fmt(v)}}, {opposite: true, title: {text: 'Viajes', style:{color:textColor}}, labels: {style: {colors: textColor}}}],
+            theme: { mode: isDark ? 'dark' : 'light' }
+        });
+
+        // B. Stacked Bar (Service vs Status)
+        const services = [...new Set(data.map(r => r.Servicio))];
+        const statusTypes = ['Completado', 'Cancelado'];
+        
+        const serviceStatusSeries = statusTypes.map(st => ({
+            name: st,
+            data: services.map(srv => data.filter(r => r.Servicio === srv && r.Estado === st).length)
+        }));
+        
+        renderApex('chartServiceStatus', {
+            series: serviceStatusSeries,
+            chart: {type:'bar', height:300, stacked: true, toolbar:{show:false}, background: 'transparent'},
+            colors: ['#05944F', '#dc3545'],
+            xaxis: {categories: services, labels: {style: {colors: textColor}}},
+            yaxis: {labels: {style: {colors: textColor}}},
+            legend: {labels: {colors: textColor}},
+            theme: { mode: isDark ? 'dark' : 'light' }
+        });
+
+        // C. Donut (Payment)
+        const pCounts = {}; data.forEach(r => { pCounts[r.Metodo_Pago] = (pCounts[r.Metodo_Pago] || 0) + 1; });
+        renderApex('chartPayment', {
+            series: Object.values(pCounts),
+            labels: Object.keys(pCounts),
+            chart: { type: 'donut', height: 300, background: 'transparent' },
+            colors: [mainColor, '#05944F', '#276EF1', '#FFC043'], // Dynamic Main Color
+            legend: { 
+                position: 'bottom', 
+                labels: { colors: isDark ? '#FFFFFF' : '#333333' } 
+            },
+            stroke: { show: false },
+            theme: { mode: isDark ? 'dark' : 'light' }
+        });
+
+        // D. Bar Horizontal (Top 10 Ingresos)
+        const driverRev = {}; data.forEach(r => driverRev[r.Conductor] = (driverRev[r.Conductor]||0) + r.Precio_DOP);
+        const top10 = Object.entries(driverRev).sort((a,b)=>b[1]-a[1]).slice(0,10);
+        
+        renderApex('chartTopDrivers', {
+            series: [{name:'Ingresos', data: top10.map(x=>x[1])}],
+            chart: {type:'bar', height:300, toolbar:{show:false}, background: 'transparent'},
+            plotOptions: {bar:{horizontal:true, borderRadius: 4}},
+            colors: [mainColor], // Dynamic Main Color
+            xaxis: {categories: top10.map(x=>x[0]), labels: {style: {colors: textColor}, formatter: (v)=>fmt(v)}},
+            yaxis: {labels: {style: {colors: textColor}}},
+            theme: { mode: isDark ? 'dark' : 'light' }
+        });
+
+        // E. Top Zonas (Horizontal)
+        const zones = {}; data.forEach(r => { zones[r.Origen] = (zones[r.Origen]||0)+1; });
+        const sortedZones = Object.entries(zones).sort((a,b)=>b[1]-a[1]).slice(0,10);
+        renderApex('chartClientsHoriz', {
+            series: [{name:'Viajes', data: sortedZones.map(x=>x[1])}],
+            chart: {type:'bar', height:300, toolbar:{show:false}, background: 'transparent'},
+            plotOptions: {bar:{horizontal:true, borderRadius: 4}},
+            colors: ['#276EF1'],
+            xaxis: {categories: sortedZones.map(x=>x[0]), labels: {style: {colors: textColor}}},
+            yaxis: {labels: {style: {colors: textColor}}},
+            theme: { mode: isDark ? 'dark' : 'light' }
+        });
+    }
+
+    function renderMap(data) {
+        markerLayer.clearLayers();
+        data.slice(0, 200).forEach(r => {
+            if (r.Latitud_Origen && r.Longitud_Origen) {
+                const icon = r.Servicio.includes('Moto') ? '🏍️' : '🚗';
+                const m = L.marker([r.Latitud_Origen, r.Longitud_Origen], {
+                    icon: L.divIcon({ className: 'emoji-marker', html: icon })
+                }).bindPopup(`<b>${r.Conductor}</b><br>${r.Vehiculo}`);
+                m.addTo(markerLayer);
+            }
+        });
+        document.getElementById('mapCounter').innerText = `${markerLayer.getLayers().length} Activos`;
+    }
+
+    function renderTable(data) {
+        const tbody = document.getElementById('rawTableBody');
+        const start = (currentPage - 1) * rowsPerPage;
+        const end = start + rowsPerPage;
+        const pageData = data.slice(start, end);
+
+        tbody.innerHTML = pageData.map(r => `
+            <tr onclick="openModal('${r.Trip_ID}')" style="cursor:pointer">
+                <td class="ps-4">
+                    <div class="d-flex align-items-center">
+                        <img src="${r.Conductor_Foto_URL || 'https://via.placeholder.com/100'}" class="img-table-driver me-3">
+                        <div class="fw-bold">${r.Conductor}</div>
+                    </div>
+                </td>
+                <td><div class="d-flex align-items-center"><img src="${r.Vehiculo_Foto_URL || ''}" class="img-table-car me-2"><small>${r.Vehiculo}</small></div></td>
+                <td><span class="badge bg-light text-dark border">${r.Servicio}</span></td>
+                <td class="fw-bold">${fmt(r.Precio_DOP)}</td>
+                <td>${r.Cumplio_OKR === 'SI' ? '<span class="text-success">✅</span>' : '<span class="text-danger">❌</span>'}</td>
+                <td><span class="badge ${r.Estado === 'Completado' ? 'bg-success' : 'bg-danger'}">${r.Estado}</span></td>
+                <td><small>${r.FechaParsed.toLocaleDateString()}</small></td>
+                <td class="text-end pe-4"><i class="fa-solid fa-chevron-right text-muted"></i></td>
+            </tr>
+        `).join('') || '<tr><td colspan="8" class="text-center py-5">Sin datos</td></tr>';
+    }
+
+    function renderPagination(data) {
+        const totalRows = data.length;
+        const totalPages = Math.ceil(totalRows / rowsPerPage);
+        const start = (currentPage - 1) * rowsPerPage;
+        const end = Math.min(start + rowsPerPage, totalRows);
+
+        document.getElementById('paginationInfo').innerText = `Mostrando ${totalRows ? start + 1 : 0} - ${end} de ${totalRows}`;
+
+        let html = '';
+        // Prev
+        html += `<li class="page-item ${currentPage === 1 ? 'disabled' : ''}">
+                    <a class="page-link" href="javascript:void(0)" onclick="changePage(${currentPage - 1})">Ant.</a>
+                 </li>`;
+
+        // Pages
+        for (let i = 1; i <= totalPages; i++) {
+            if (i === 1 || i === totalPages || (i >= currentPage - 2 && i <= currentPage + 2)) {
+                html += `<li class="page-item ${i === currentPage ? 'active' : ''}">
+                            <a class="page-link" href="javascript:void(0)" onclick="changePage(${i})">${i}</a>
+                         </li>`;
+            } else if (i === currentPage - 3 || i === currentPage + 3) {
+                html += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
+            }
+        }
+
+        // Next
+        html += `<li class="page-item ${currentPage === totalPages || totalRows === 0 ? 'disabled' : ''}">
+                    <a class="page-link" href="javascript:void(0)" onclick="changePage(${currentPage + 1})">Sig.</a>
+                 </li>`;
+
+        document.getElementById('paginationControls').innerHTML = html;
+    }
+
+    window.changePage = function(p) {
+        const totalRows = getFiltered().length;
+        const totalPages = Math.ceil(totalRows / rowsPerPage);
+        if (p < 1 || p > totalPages) return;
+        currentPage = p;
+        renderAll();
+    }
+
+    window.openModal = function(id) {
+        const r = rawData.find(x => x.Trip_ID == id);
+        if (!r) return;
+
+        document.getElementById('modName').innerText = r.Conductor;
+        document.getElementById('modId').innerText = `ID: ${r.Trip_ID}`;
+        document.getElementById('modPhoto').src = r.Conductor_Foto_URL;
+        document.getElementById('modService').innerText = r.Servicio;
+        document.getElementById('modRating').innerText = '★'.repeat(Math.round(r.Rating || 5));
+        
+        document.getElementById('modCarPhoto').src = r.Vehiculo_Foto_URL;
+        document.getElementById('modCarModel').innerText = r.Vehiculo;
+        document.getElementById('modCarPlate').innerText = r.Placa || "RD-12345";
+        document.getElementById('modCarColor').innerText = r.Color || "Gris";
+        document.getElementById('modCarYear').innerText = r.Anio || "2022";
+        
+        document.getElementById('modClient').innerText = r.Cliente || "Usuario Uber";
+        document.getElementById('modStatus').innerText = r.Estado || "Completado";
+        document.getElementById('modStatus').className = (r.Estado === 'Cancelado' ? 'text-danger' : 'text-success') + ' fw-bold fs-5 mt-1';
+        
+        document.getElementById('modOrigin').innerText = r.Origen;
+        document.getElementById('modDest').innerText = r.Destino;
+        
+        document.getElementById('modPrice').innerText = fmt(r.Precio_DOP);
+        document.getElementById('modCost').innerText = fmt(r.Costo_DOP);
+        document.getElementById('modProfit').innerText = fmt(r.Ganancia_DOP);
+        document.getElementById('modPayment').innerText = r.Metodo_Pago || 'Efectivo';
+        
+        const okrEl = document.getElementById('modOkr');
+        okrEl.innerText = r.Cumplio_OKR === 'SI' ? 'A TIEMPO' : 'RETRASADO';
+        
+        // Modal Chart: Histórico personal
+        const hist = rawData.filter(x => x.Conductor === r.Conductor).slice(-10);
+        const isDark = document.documentElement.getAttribute('data-bs-theme') === 'dark';
+        const mainColor = isDark ? '#ffffff' : '#000000';
+
+        renderApex('modChart', {
+            series: [{name:'Ingresos', data: hist.map(h=>h.Precio_DOP)}],
+            chart: {type:'line', height:150, toolbar:{show:false}, background: 'transparent'},
+            xaxis: {categories: hist.map(h=>h.FechaParsed.toLocaleDateString()), labels:{show:false}},
+            colors: [mainColor],
+            theme: { mode: isDark ? 'dark' : 'light' }
+        });
+
+        new bootstrap.Modal(document.getElementById('fullModal')).show();
+    }
+
+    function renderApex(id, opts) {
+        if(charts[id]) charts[id].destroy();
+        charts[id] = new ApexCharts(document.querySelector("#"+id), opts);
+        charts[id].render();
+    }
+
+    function resetAll() {
+        document.querySelectorAll('.filter-container input, .filter-container select').forEach(el => el.value = '');
+        renderAll();
+    }
+</script>
+</body>
+</html>
